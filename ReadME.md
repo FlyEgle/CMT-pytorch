@@ -71,6 +71,7 @@ You can see this [repo](https://github.com/NVIDIA/apex) to find how to install t
     python utils/calculate_acc.py --logits_file $save_folder$/acc_logits/
     ```
 ### 5. Result
+
 |model-name|input_size|FLOPs|Params|acc@one_crop(ours)|acc(papers)|weights|
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 |CMT-T|160x160|516M|11.3M|75.124%|79.2%|[weights](https://drive.google.com/file/d/1YngcCchrJ43bVWxuy4OiTfwy76gQyIBk/view?usp=sharing)|
