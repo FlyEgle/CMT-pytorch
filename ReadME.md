@@ -1,4 +1,6 @@
-# CMT: Convolutional Neural Networks Meet Vision Transformers
+# CMT: Convolutional Neural Networks Meet Vision Transformers 
+
+[arxiv](https://arxiv.org/abs/2107.06263)
 
 ### 1. Introduction
 
