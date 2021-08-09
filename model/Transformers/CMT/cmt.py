@@ -36,7 +36,7 @@ class CMTLayers(nn.Module):
     def __init__(self, dim, num_heads=8, ffn_ratio = 4., 
                     relative_pos_embeeding=True, no_distance_pos_embeeding=False,
                     features_size=56, qkv_bias=False, qk_scale=None, 
-                    attn_drop=0., proj_drop=0., sr_ratio=1. ):
+                    attn_drop=0., proj_drop=0., sr_ratio=1. , drop_path_rate=0.):
         super(CMTLayers, self).__init__()
 
         self.dim = dim 
@@ -58,6 +58,7 @@ class CMTLayers(nn.Module):
             sr_ratio=sr_ratio
         )
         self.IRFFN = InvertedResidualFeedForward(self.dim, self.ffn_ratio)
+        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0. else nn.Identity()
 
     def forward(self, x):
         lpu = self.LPU(x)
@@ -75,7 +76,7 @@ class CMTLayers(nn.Module):
         norm2 = self.norm2(x_2)
         norm2 = rearrange(norm2, 'b ( h w ) c -> b c h w', h=h, w=w)
         ffn = self.IRFFN(norm2)
-        x = x + ffn 
+        x = x + self.drop_path(ffn)
         
         return x 
 
@@ -84,7 +85,7 @@ class CMTBlock(nn.Module):
     def __init__(self, dim, num_heads=8, ffn_ratio=4., 
                 relative_pos_embeeding=True, no_distance_pos_embeeding=False,
                 features_size=56, qkv_bias=False, qk_scale=None, 
-                attn_drop=0., proj_drop=0., sr_ratio=1., num_layers=1):
+                attn_drop=0., proj_drop=0., sr_ratio=1., num_layers=1, drop_path_rate=[0.1]):
         super(CMTBlock, self).__init__()
         self.dim = dim 
         self.num_layers = num_layers
@@ -101,7 +102,9 @@ class CMTBlock(nn.Module):
             qk_scale = qk_scale,
             attn_drop = attn_drop,
             proj_drop = proj_drop,
-            sr_ratio = sr_ratio) for i in range(num_layers)]
+            sr_ratio = sr_ratio,
+            drop_path_rate = drop_path_rate[i]
+            ) for i in range(num_layers)]
         )
         
     def forward(self, x):
@@ -338,7 +341,7 @@ class ConvolutionMeetVisionTransformers(nn.Module):
                 sr_ratio_list: list, qkv_bias : bool,
                 proj_drop: float, attn_drop: float,
                 rpe: bool, pe_nd: bool, ffn_ratio: float,
-                num_classes: int
+                num_classes: int, drop_path_rate: float = 0.1
                 ):
         """CMT implementation
         Args:
@@ -356,6 +359,7 @@ class ConvolutionMeetVisionTransformers(nn.Module):
             pe_nd       : no distance pos embeeding (learnable)
             ffn_ratio   : ffn up & down dims
             num_classes :  output numclasses
+            drop_path_rate: Stochastic depth rate. Default: 0.1
         Return:
             cmt model
         """
@@ -377,6 +381,7 @@ class ConvolutionMeetVisionTransformers(nn.Module):
 
         # ffn ratio
         self.ffn_ratio = ffn_ratio
+        self.drop_path_rate = drop_path_rate
 
         self.qkv_bias  = qkv_bias
         self.proj_drop = proj_drop
@@ -403,6 +408,12 @@ class ConvolutionMeetVisionTransformers(nn.Module):
             out_channel=dims_list[0],
             layers_num=2
         )
+        # stochastic depth
+        if self.drop_path_rate > 0.0:
+            dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(block_list))]  # stochastic depth decay rule
+        else:
+            dpr = [-1 for _ in sum(block_list)]
+
         self.pool1 = PatchAggregation(in_channel=dims_list[0], out_channel=dims_list[1])
         self.pool2 = PatchAggregation(in_channel=dims_list[1], out_channel=dims_list[2])
         self.pool3 = PatchAggregation(in_channel=dims_list[2], out_channel=dims_list[3])
@@ -411,19 +422,19 @@ class ConvolutionMeetVisionTransformers(nn.Module):
         self.stage1 = CMTBlock(
             dim=dims_list[1], num_heads=heads_list[0], relative_pos_embeeding=self.rpe, no_distance_pos_embeeding=self.pe_nd,
             features_size=resolution_list[1], qkv_bias=self.qkv_bias, attn_drop=self.attn_drop, ffn_ratio=self.ffn_ratio,
-            proj_drop=self.proj_drop, sr_ratio=sr_ratio_list[0], num_layers=block_list[0])
+            proj_drop=self.proj_drop, sr_ratio=sr_ratio_list[0], num_layers=block_list[0], drop_path_rate=dpr[:block_list[0]])
         self.stage2 = CMTBlock(
             dim=dims_list[2], num_heads=heads_list[1], relative_pos_embeeding=self.rpe, no_distance_pos_embeeding=self.pe_nd,
             features_size=resolution_list[2], qkv_bias=self.qkv_bias, attn_drop=self.attn_drop, ffn_ratio=self.ffn_ratio,
-            proj_drop=self.proj_drop, sr_ratio=sr_ratio_list[1], num_layers=block_list[1])
+            proj_drop=self.proj_drop, sr_ratio=sr_ratio_list[1], num_layers=block_list[1], drop_path_rate=dpr[sum(block_list[:1]): sum(block_list[:2])])
         self.stage3 = CMTBlock(
             dim=dims_list[3], num_heads=heads_list[2], relative_pos_embeeding=self.rpe, no_distance_pos_embeeding=self.pe_nd,
             features_size=resolution_list[3], qkv_bias=self.qkv_bias, attn_drop=self.attn_drop, ffn_ratio=self.ffn_ratio,
-            proj_drop=self.proj_drop, sr_ratio=sr_ratio_list[2], num_layers=block_list[2])
+            proj_drop=self.proj_drop, sr_ratio=sr_ratio_list[2], num_layers=block_list[2], drop_path_rate=dpr[sum(block_list[:2]): sum(block_list[:3])])
         self.stage4 = CMTBlock(
             dim=dims_list[4], num_heads=heads_list[3], relative_pos_embeeding=self.rpe, no_distance_pos_embeeding=self.pe_nd,
             features_size=resolution_list[4], qkv_bias=self.qkv_bias, attn_drop=self.attn_drop, ffn_ratio=self.ffn_ratio,
-            proj_drop=self.proj_drop, sr_ratio=sr_ratio_list[3], num_layers=block_list[3])
+            proj_drop=self.proj_drop, sr_ratio=sr_ratio_list[3], num_layers=block_list[3], drop_path_rate=dpr[sum(block_list[:3]): sum(block_list[:4])])
 
         self.gap = nn.AdaptiveAvgPool2d(output_size=(1, 1))
         self.fc = nn.Linear(dims_list[4], 1280)
@@ -487,7 +498,8 @@ def CmtTi(input_resolution=(160, 160),
             qkv_bias = True, 
             proj_drop = 0.1,
             attn_drop = 0.1,
-            num_classes = 1000):
+            num_classes = 1000,
+            drop_path_rate = 0.1):
     model = ConvolutionMeetVisionTransformers(
         input_resolution=input_resolution,
         ape=ape,
@@ -502,7 +514,8 @@ def CmtTi(input_resolution=(160, 160),
         heads_list=[1,2,4,8],
         block_list=[2, 2, 10, 2],
         sr_ratio_list=[8, 4, 2, 1],
-        num_classes=num_classes
+        num_classes=num_classes, 
+        drop_path_rate = drop_path_rate
     )
     return model
 
@@ -515,7 +528,8 @@ def CmtXS(input_resolution=(192, 192),
             qkv_bias = True, 
             proj_drop = 0.1,
             attn_drop = 0.1,
-            num_classes = 1000):
+            num_classes = 1000,
+            drop_path_rate = 0.1):
     model = ConvolutionMeetVisionTransformers(
         input_resolution=input_resolution,
         ape=ape,
@@ -530,7 +544,8 @@ def CmtXS(input_resolution=(192, 192),
         heads_list=[1,2,4,8],
         block_list=[3, 3, 12, 3],
         sr_ratio_list=[8, 4, 2, 1],
-        num_classes=num_classes
+        num_classes=num_classes, 
+        drop_path_rate = drop_path_rate
     )
     return model
 
@@ -543,7 +558,8 @@ def CmtS(input_resolution=(224, 224),
             qkv_bias = True, 
             proj_drop = 0.1,
             attn_drop = 0.1,
-            num_classes = 1000):
+            num_classes = 1000,
+            drop_path_rate = 0.1):
     model = ConvolutionMeetVisionTransformers(
         input_resolution=input_resolution,
         ape=ape,
@@ -558,7 +574,8 @@ def CmtS(input_resolution=(224, 224),
         heads_list=[1, 2, 4, 8],
         block_list=[3, 3, 16, 3],
         sr_ratio_list=[8, 4, 2, 1],
-        num_classes=num_classes
+        num_classes=num_classes,
+        drop_path_rate = drop_path_rate
     )
     return model
 
@@ -572,7 +589,8 @@ def CmtB(input_resolution=(256, 256),
             qkv_bias = True, 
             proj_drop = 0.1,
             attn_drop = 0.1,
-            num_classes = 1000):
+            num_classes = 1000,
+            drop_path_rate = 0.1):
     model = ConvolutionMeetVisionTransformers(
         input_resolution=input_resolution,
         ape=ape,
@@ -587,14 +605,15 @@ def CmtB(input_resolution=(256, 256),
         heads_list=[1, 2, 4, 8],
         block_list=[4, 4, 20, 4],
         sr_ratio_list=[8, 4, 2, 1],
-        num_classes=num_classes
+        num_classes=num_classes,
+        drop_path_rate = drop_path_rate
     )
     return model
 
 
 if __name__ == "__main__":
-    x = torch.randn(1, 3, 256, 256)
-    model = CmtB()
+    x = torch.randn(1, 3, 160, 160)
+    model = CmtTi()
 
     print(model)
     out = model(x)

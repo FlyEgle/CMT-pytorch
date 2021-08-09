@@ -4,7 +4,6 @@ Calculate the video accuracy
 """
 import os
 import json
-from apex import parallel
 import numpy as np
 from scipy.special import softmax
 from tqdm import tqdm 
@@ -35,7 +34,6 @@ def argmax(data_list: list, num: int):
     argmax_index = [x[0] for x in argmax_data_dict]
     return argmax_index
 
-
 def acc_top_n(data_file, n=5):
     lines = open(data_file).readlines()
     lines_json = [json.loads(x.strip()) for x in lines]
@@ -51,7 +49,6 @@ def acc_top_n(data_file, n=5):
         if label in arg_index:
             correct += 1
     return correct, total_length
-
 
 # logits_file = "/data/jiangmingchao/data/AICutDataset/logits2"
 

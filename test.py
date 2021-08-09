@@ -24,13 +24,7 @@ from torch.utils.data.dataloader import DataLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 
-# from model.CNN.resnet import resnet50
-from model.model_factory import ModelFactory
-# swin-transformers
-from model.Transformers.swin_transformers.models.build import build_model, build_model_features
-from model.Transformers.swin_transformers.configs.config import get_config
-# features
-from model.CNN.resnet_features import R50Features
+
 from model.Transformers.CMT.cmt import CmtTi, CmtXS, CmtS, CmtB
 from data.ImagenetDataset import ImageDatasetTest
 from utils.precise_bn import *
@@ -103,8 +97,6 @@ parser.add_argument('--local_rank', default=1)
 
 args = parser.parse_args()
 
-config = get_config(args)
-
 def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
 
@@ -129,85 +121,54 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.rank == 0:
         if not os.path.isfile(args.checkpoints_path):
             os.makedirs(args.checkpoints_path)
-    
-    if args.get_features:
-        if args.swin:
-            # swin-transformers
-            model = build_model_features(config)
-            if args.rank == 0:
-                print(model)
-        else:
-            model = R50Features(args.checkpoints_path)
-    
-    else:
-        
-        # backbone = ModelFactory.getmodel(args.model_name)
-        # if args.model_name in ["R50", "R101", "R152"]:
-        #     model = backbone(
-        #         pretrained=False,
-        #         num_classes=args.num_classes
-        #     )
-        #     mode = "cnn"
-        # elif args.model_name == "vit":
-        #     model = backbone(
-        #         image_size = args.crop_size, 
-        #         patch_size = args.patch_size, 
-        #         num_classes = args.num_classes,
-        #         dim = args.dim,
-        #         depth = args.depth,
-        #         heads = args.heads,
-        #         mlp_dim = args.mlp_dim,
-        #         dim_head = args.dim_head,
-        #         dropout = args.dropout,
-        #         emb_dropout = args.emb_dropout
-        #     )
-        #     mode = "cnn"
-        if args.model_name.lower() == "cmtti":
-            model = CmtTi(
-                num_classes=args.num_classes,
-                ape=True if args.ape else False,
-                rpe=True if args.rpe else False,
-                pe_nd=True if args.pe_nd else False,
-                qkv_bias=True if args.qkv_bias else False,
-                input_resolution=(args.crop_size, args.crop_size)
-            )
-            mode = "cnn"
-        elif args.model_name.lower() == "cmtxs":
-            model = CmtXS(
-                num_classes=args.num_classes,
-                ape=True if args.ape else False,
-                rpe=True if args.rpe else False,
-                pe_nd=True if args.pe_nd else False,
-                qkv_bias=True if args.qkv_bias else False,
-                input_resolution=(args.crop_size, args.crop_size)
-            )
-            mode = "cnn"
-        elif args.model_name.lower() == "cmts":
-            model = CmtS(
-                num_classes=args.num_classes,
-                ape=True if args.ape else False,
-                rpe=True if args.rpe else False,
-                pe_nd=True if args.pe_nd else False,
-                qkv_bias=True if args.qkv_bias else False,
-                input_resolution=(args.crop_size, args.crop_size)
-            )
-            mode = "cnn"
-        elif args.model_name.lower() == "cmtb":
-            model = CmtB(
-                num_classes=args.num_classes,
-                ape=True if args.ape else False,
-                rpe=True if args.rpe else False,
-                pe_nd=True if args.pe_nd else False,
-                qkv_bias=True if args.qkv_bias else False,
-                input_resolution=(args.crop_size, args.crop_size)
-            )
-            mode = "cnn"
-        else:
-            raise NotImplementedError(f"{args.model_name} have not been use!!")
 
-        # load the model checkpoints
-        state_dict = torch.load(args.checkpoints_path, map_location="cpu")['state_dict']
-        model.load_state_dict(state_dict)
+    
+    if args.model_name.lower() == "cmtti":
+        model = CmtTi(
+            num_classes=args.num_classes,
+            ape=True if args.ape else False,
+            rpe=True if args.rpe else False,
+            pe_nd=True if args.pe_nd else False,
+            qkv_bias=True if args.qkv_bias else False,
+            input_resolution=(args.crop_size, args.crop_size)
+        )
+        mode = "cnn"
+    elif args.model_name.lower() == "cmtxs":
+        model = CmtXS(
+            num_classes=args.num_classes,
+            ape=True if args.ape else False,
+            rpe=True if args.rpe else False,
+            pe_nd=True if args.pe_nd else False,
+            qkv_bias=True if args.qkv_bias else False,
+            input_resolution=(args.crop_size, args.crop_size)
+        )
+        mode = "cnn"
+    elif args.model_name.lower() == "cmts":
+        model = CmtS(
+            num_classes=args.num_classes,
+            ape=True if args.ape else False,
+            rpe=True if args.rpe else False,
+            pe_nd=True if args.pe_nd else False,
+            qkv_bias=True if args.qkv_bias else False,
+            input_resolution=(args.crop_size, args.crop_size)
+        )
+        mode = "cnn"
+    elif args.model_name.lower() == "cmtb":
+        model = CmtB(
+            num_classes=args.num_classes,
+            ape=True if args.ape else False,
+            rpe=True if args.rpe else False,
+            pe_nd=True if args.pe_nd else False,
+            qkv_bias=True if args.qkv_bias else False,
+            input_resolution=(args.crop_size, args.crop_size)
+        )
+        mode = "cnn"
+    else:
+        raise NotImplementedError(f"{args.model_name} have not been use!!")
+
+        # # load the model checkpoints
+    state_dict = torch.load(args.checkpoints_path, map_location="cpu")['state_dict']
+    model.load_state_dict(state_dict)
 
     if args.rank == 0:
         print(model)

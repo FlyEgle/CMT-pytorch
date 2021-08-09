@@ -11,16 +11,18 @@ import random
 import math
 import time
 import os
+import torch.distributed as dist
+
+
 from model.Transformers.CMT.cmt import CmtTi, CmtXS, CmtS, CmtB
 
-from model.CNN.resnet import resnet50
 from utils.augments import *
 from utils.precise_bn import *
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 from utils.optimizer_step import Optimizer, build_optimizer
 from data.ImagenetDataset import ImageDataset
-from model.model_factory import ModelFactory
+from data.samplers import RASampler
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DataParallel
 from torch.utils.data import DataLoader
@@ -120,6 +122,9 @@ parser.add_argument('--cosine', default=0, type=int)
 parser.add_argument('--grad_clip', default=0, type=int)
 parser.add_argument('--max_grad_norm', default=5.0, type=float)
 
+# drop path rate 
+parser.add_argument('--drop_path_rate', default=0.1, type=float)
+
 # * Mixup params
 parser.add_argument('--mixup', type=float, default=0.8,
                     help='mixup alpha, mixup enabled if > 0. (default: 0.8)')
@@ -134,7 +139,7 @@ parser.add_argument('--mixup-switch-prob', type=float, default=0.5,
 parser.add_argument('--mixup-mode', type=str, default='batch',
                     help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 parser.add_argument('--smoothing', type=float, default=0.1, help='Label smoothing (default: 0.1)')
-
+parser.add_argument('--repeated-aug', type=float, default=0, help="repeated aug")
 # ---- actnn 2-bit
 parser.add_argument('--actnn', default=0, type=int)
 
@@ -220,33 +225,15 @@ def main_worker(args):
     train_metric = {"losses": train_losses_metric,
                     "accuracy": train_accuracy_metric}
 
-    # model
-    # backbone = ModelFactory.getmodel(args.model_name)
-    if args.model_name.lower() == "r50":
-        model = resnet50(
-            num_classes = args.num_classes,
-            pretrained = False
-        )
-    # elif args.model_name == "vit":
-    #     model = backbone(
-    #         image_size=args.crop_size,
-    #         patch_size=args.patch_size,
-    #         num_classes=args.num_classes,
-    #         dim=args.dim,
-    #         depth=args.depth,
-    #         heads=args.heads,
-    #         mlp_dim=args.mlp_dim,
-    #         dim_head=args.dim_head,
-    #         dropout=args.dropout,
-    #         emb_dropout=args.emb_dropout
-    #     )
-    elif args.model_name.lower() == "cmtti":
+    
+    if args.model_name.lower() == "cmtti":
         model = CmtTi(num_classes=args.num_classes,
                         input_resolution=(args.crop_size, args.crop_size),
                         qkv_bias=True if args.qkv_bias else False,
                         ape=True if args.ape else False,
                         rpe=True if args.rpe else False,
-                        pe_nd=True if args.pe_nd else False
+                        pe_nd=True if args.pe_nd else False,
+                        drop_path_rate = args.drop_path_rate
                         )
     elif args.model_name.lower() == "cmtxs":
         model = CmtXS(num_classes=args.num_classes,
@@ -254,7 +241,9 @@ def main_worker(args):
                       qkv_bias=True if args.qkv_bias else False,
                       ape=True if args.ape else False,
                       rpe=True if args.rpe else False,
-                      pe_nd=True if args.pe_nd else False)
+                      pe_nd=True if args.pe_nd else False,
+                      drop_path_rate = args.drop_path_rate
+                      )
 
     elif args.model_name.lower() == "cmts":
         model = CmtS(num_classes=args.num_classes,
@@ -262,7 +251,9 @@ def main_worker(args):
                       qkv_bias=True if args.qkv_bias else False,
                       ape=True if args.ape else False,
                       rpe=True if args.rpe else False,
-                      pe_nd=True if args.pe_nd else False)
+                      pe_nd=True if args.pe_nd else False,
+                      drop_path_rate = args.drop_path_rate
+                      )
 
     elif args.model_name.lower() == "cmtb":
         model = CmtB(num_classes=args.num_classes,
@@ -270,7 +261,9 @@ def main_worker(args):
                      qkv_bias=True if args.qkv_bias else False,
                      ape=True if args.ape else False,
                      rpe=True if args.rpe else False,
-                     pe_nd=True if args.pe_nd else False)
+                     pe_nd=True if args.pe_nd else False,
+                     drop_path_rate = args.drop_path_rate
+                     )
 
     else:
         raise NotImplementedError(f"{args.model_name} have not been use!!")
@@ -278,7 +271,7 @@ def main_worker(args):
     if args.local_rank == 0:
         print(f"===============model arch ===============")
         print(model)
-
+        
     # model mode
     model.train()
 
@@ -363,7 +356,16 @@ def main_worker(args):
 
     # sampler
     if args.distributed:
-        train_sampler = DistributedSampler(train_dataset)
+        if args.repeated_aug:
+            train_sampler = RASampler(
+                train_dataset, 
+                num_replicas=dist.get_world_size(), 
+                rank=dist.get_rank(), 
+                shuffle=True
+            )
+            print("use the repeated augment!!!")
+        else:
+            train_sampler = DistributedSampler(train_dataset)
         validation_sampler = DistributedSampler(validation_dataset)
     else:
         train_sampler = None
@@ -690,7 +692,7 @@ def cosine_learning_rate(args, epoch, batch_iter, optimizer, train_batch):
     total_epochs = args.max_epochs
     warm_epochs = args.warmup_epochs
     if epoch <= warm_epochs:
-        lr_adj = (batch_iter + 1) / (warm_epochs * train_batch)
+        lr_adj = (batch_iter + 1) / (warm_epochs * train_batch) + 1e-6
     else:
         lr_adj = 1/2 * (1 + math.cos(batch_iter * math.pi /
                                      ((total_epochs - warm_epochs) * train_batch)))
