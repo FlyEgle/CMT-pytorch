@@ -70,6 +70,9 @@ You can see this [repo](https://github.com/NVIDIA/apex) to find how to install t
     ```python 
     python utils/calculate_acc.py --logits_file $save_folder$/acc_logits/
     ```
+|model-name|input_size|FLOPs|Params|acc@one_crop(ours)|acc(papers)|weights|
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+
 ### 5. Result
 
 |model-name|input_size|FLOPs|Params|acc@one_crop(ours)|acc(papers)|weights|
