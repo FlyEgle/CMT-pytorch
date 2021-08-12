@@ -86,8 +86,8 @@ You can see this [repo](https://github.com/NVIDIA/apex) to find how to install t
 
 ### 6. TODO
 - [ ] Other result may comming sonn if someone need.
-- [ ] Release the CMT-XS result on the imagenet
-- [ ] Check the diff with papers.
+- [ ] Release the CMT-XS result on the imagenet.
+- [x] Check the diff with papers, **author give the hyparameters on the issue**
 - [x] Adjusting the best hyperparameters for CMT or transformers
 
 ### Supplementary
