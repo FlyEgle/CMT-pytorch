@@ -55,6 +55,9 @@ You can see this [repo](https://github.com/NVIDIA/apex) to find how to install t
 
     ```
 
+    **Note**: If you use the bs 128 * 8 may be get more accuracy, balance the acc & speed.
+
+
 2. Inference
     ```bash 
     #!/bin/bash
