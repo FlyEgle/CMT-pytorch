@@ -16,11 +16,7 @@ from timm.models.layers import DropPath, trunc_normal_
 def make_pairs(x):
     """make the int -> tuple 
     """
-    if isinstance(x, tuple):
-        return x 
-    elif isinstance(x, int):
-        x = [x for _ in range(2)]
-        return tuple(x)
+    return x if isinstance(x, tuple) else (x, x)
 
 
 def generate_relative_distance(number_size):
