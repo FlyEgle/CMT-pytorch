@@ -40,8 +40,8 @@ class CMTLayers(nn.Module):
 
         self.norm1 = nn.LayerNorm(self.dim)
         self.norm2 = nn.LayerNorm(self.dim)
-        self.LPU = LocalPerceptionUint(self.dim)
-        self.LMHSA = LightMutilHeadSelfAttention(
+        self.LPU = LocalPerceptionUnit(self.dim)
+        self.LMHSA = LightMultiHeadSelfAttention(
             dim = self.dim,
             num_heads = num_heads,
             relative_pos_embeeding = relative_pos_embeeding,
@@ -109,9 +109,9 @@ class CMTBlock(nn.Module):
         return x 
 
 
-class LocalPerceptionUint(nn.Module):
+class LocalPerceptionUnit(nn.Module):
     def __init__(self, dim, act=False):
-        super(LocalPerceptionUint, self).__init__()
+        super(LocalPerceptionUnit, self).__init__()
         self.act = act 
         self.conv_3x3_dw = ConvDW3x3(dim)
         if self.act:
@@ -129,7 +129,7 @@ class LocalPerceptionUint(nn.Module):
             return out 
 
 
-class LightMutilHeadSelfAttention(nn.Module):
+class LightMultiHeadSelfAttention(nn.Module):
     """calculate the self attention with down sample the resolution for k, v, add the relative position bias before softmax
     Args:
         dim (int) : features map channels or dims 
@@ -148,7 +148,7 @@ class LightMutilHeadSelfAttention(nn.Module):
     def __init__(self, dim, num_heads=8, features_size=56, 
                 relative_pos_embeeding=False, no_distance_pos_embeeding=False, qkv_bias=False, qk_scale=None, 
                 attn_drop=0., proj_drop=0., sr_ratio=1.):
-        super(LightMutilHeadSelfAttention, self).__init__()
+        super(LightMultiHeadSelfAttention, self).__init__()
         assert dim % num_heads == 0, f"dim {dim} should be divided by num_heads {num_heads}"
         self.dim = dim 
         self.num_heads = num_heads
