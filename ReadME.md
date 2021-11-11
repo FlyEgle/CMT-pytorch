@@ -94,7 +94,7 @@ You can see this [repo](https://github.com/NVIDIA/apex) to find how to install t
 - [x] Adjusting the best hyperparameters for CMT or transformers
 
 ### Supplementary
-If you want to know more, I give the CMT explanation, as well as the tuning and training process on [here](https://www.zhihu.com/people/flyegle).
+If you want to know more, I give the CMT explanation, as well as the tuning and training process on [here](https://zhuanlan.zhihu.com/p/398019698).
 
 
 
